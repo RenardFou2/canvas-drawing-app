@@ -7,6 +7,7 @@ const Canvas = () => {
   const [shape, setShape] = useState("line");
   const [startPosition, setStartPosition] = useState({ x: 0, y: 0 });
   const [shapes, setShapes] = useState([]);
+  const [erasing, setErasing] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -18,6 +19,7 @@ const Canvas = () => {
   }, []);
 
   const startDrawing = (e) => {
+    if (erasing) return;
     setDrawing(true);
     const rect = canvasRef.current.getBoundingClientRect();
     setStartPosition({
@@ -93,6 +95,32 @@ const Canvas = () => {
     setDrawing(false);
   };
 
+  const handleErase = (e) => {
+    if (!erasing) return;
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const updatedShapes = shapes.filter((s) => {
+      switch (s.type) {
+        case "line":
+          return !(x >= Math.min(s.startX, s.endX) && x <= Math.max(s.startX, s.endX) && y >= Math.min(s.startY, s.endY) && y <= Math.max(s.startY, s.endY));
+        case "square":
+          return !(x >= s.startX && x <= s.startX + s.width && y >= s.startY && y <= s.startY + s.height);
+        case "circle":
+          const distance = Math.sqrt(Math.pow(x - s.startX, 2) + Math.pow(y - s.startY, 2));
+          return distance > s.radius;
+        default:
+          return true;
+      }
+    });
+
+    setShapes(updatedShapes);
+    context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    redrawShapes();
+  };
+
   const redrawShapes = () => {
     shapes.forEach((s) => {
       context.beginPath();
@@ -123,7 +151,7 @@ const Canvas = () => {
     <div>
       <canvas
         ref={canvasRef}
-        onMouseDown={startDrawing}
+        onMouseDown={erasing ? handleErase : startDrawing}
         onMouseMove={drawShape}
         onMouseUp={finishDrawing}
         onMouseLeave={finishDrawing}
@@ -133,7 +161,8 @@ const Canvas = () => {
         <button onClick={() => setShape("line")}>Draw Line</button>
         <button onClick={() => setShape("square")}>Draw Square</button>
         <button onClick={() => setShape("circle")}>Draw Circle</button>
-        <button onClick={clearCanvas}>Erase</button>
+        <button onClick={() => setErasing(!erasing)}>{erasing ? "Stop Erasing" : "Erase Shapes"}</button>
+        <button onClick={clearCanvas}>Clear Canvas</button>
       </div>
     </div>
   );
