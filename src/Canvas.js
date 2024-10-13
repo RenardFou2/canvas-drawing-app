@@ -7,7 +7,11 @@ const Canvas = () => {
   const [shape, setShape] = useState("line");
   const [startPosition, setStartPosition] = useState({ x: 0, y: 0 });
   const [shapes, setShapes] = useState([]);
-  const [erasing, setErasing] = useState(false);
+  const [mode, setMode] = useState("draw");
+  const [dragging, setDragging] = useState(false);
+  const [draggedShapeIndex, setDraggedShapeIndex] = useState(null);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [selectedShape, setSelectedShape] = useState(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -19,13 +23,14 @@ const Canvas = () => {
   }, []);
 
   const startDrawing = (e) => {
-    if (erasing) return;
+    if (mode !== "draw") return;
     setDrawing(true);
     const rect = canvasRef.current.getBoundingClientRect();
     setStartPosition({
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
     });
+    setSelectedShape(null); // Reset selected shape
   };
 
   const drawShape = (e) => {
@@ -64,6 +69,7 @@ const Canvas = () => {
     }
 
     context.stroke();
+    setSelectedShape(newShape);
   };
 
   const finishDrawing = (e) => {
@@ -96,7 +102,7 @@ const Canvas = () => {
   };
 
   const handleErase = (e) => {
-    if (!erasing) return;
+    if (mode !== "erase") return;
 
     const rect = canvasRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -119,6 +125,97 @@ const Canvas = () => {
     setShapes(updatedShapes);
     context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
     redrawShapes();
+  };
+
+  const handleShapeClick = (e) => {
+    if (mode !== "drag") return;
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    for (let i = shapes.length - 1; i >= 0; i--) {
+      const s = shapes[i];
+      switch (s.type) {
+        case "line":
+          if (x >= Math.min(s.startX, s.endX) && x <= Math.max(s.startX, s.endX) && y >= Math.min(s.startY, s.endY) && y <= Math.max(s.startY, s.endY)) {
+            startDragging(i, x, y, s);
+            setSelectedShape(s);
+            return;
+          }
+          break;
+        case "square":
+          if (x >= s.startX && x <= s.startX + s.width && y >= s.startY && y <= s.startY + s.height) {
+            startDragging(i, x, y, s);
+            setSelectedShape(s); // Show shape data when clicking
+            return;
+          }
+          break;
+        case "circle":
+          const distance = Math.sqrt(Math.pow(x - s.startX, 2) + Math.pow(y - s.startY, 2));
+          if (distance <= s.radius) {
+            startDragging(i, x, y, s);
+            setSelectedShape(s);
+            return;
+          }
+          break;
+        default:
+          break;
+      }
+    }
+  };
+
+  const startDragging = (index, x, y, shape) => {
+    setDragging(true);
+    setDraggedShapeIndex(index);
+    setOffset({
+      x: x - shape.startX,
+      y: y - shape.startY,
+    });
+  };
+
+  const handleDragging = (e) => {
+    if (!dragging || draggedShapeIndex === null) return;
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const updatedShapes = [...shapes];
+    const shape = updatedShapes[draggedShapeIndex];
+
+    switch (shape.type) {
+      case "line":
+        const deltaX = x - offset.x;
+        const deltaY = y - offset.y;
+        const lineWidth = shape.endX - shape.startX;
+        const lineHeight = shape.endY - shape.startY;
+        shape.startX = deltaX;
+        shape.startY = deltaY;
+        shape.endX = deltaX + lineWidth;
+        shape.endY = deltaY + lineHeight;
+        break;
+      case "square":
+        shape.startX = x - offset.x;
+        shape.startY = y - offset.y;
+        break;
+      case "circle":
+        shape.startX = x - offset.x;
+        shape.startY = y - offset.y;
+        break;
+      default:
+        break;
+    }
+
+    setShapes(updatedShapes);
+    setSelectedShape(shape);
+    context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    redrawShapes();
+  };
+
+  const stopDragging = () => {
+    setDragging(false);
+    setDraggedShapeIndex(null);
   };
 
   const redrawShapes = () => {
@@ -145,25 +242,118 @@ const Canvas = () => {
   const clearCanvas = () => {
     context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
     setShapes([]);
+    setSelectedShape(null);
+  };
+
+  const handleShapeInputChange = (e, property) => {
+    if (!selectedShape) return;
+
+    const value = parseFloat(e.target.value);
+    if (isNaN(value)) return;
+
+    const updatedShape = { ...selectedShape, [property]: value };
+    setSelectedShape(updatedShape);
+
+    const updatedShapes = shapes.map((s) =>
+      s === selectedShape ? updatedShape : s
+    );
+    setShapes(updatedShapes);
+
+    context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    redrawShapes();
   };
 
   return (
     <div>
       <canvas
         ref={canvasRef}
-        onMouseDown={erasing ? handleErase : startDrawing}
-        onMouseMove={drawShape}
-        onMouseUp={finishDrawing}
-        onMouseLeave={finishDrawing}
+        onMouseDown={(e) => {
+          if (mode === "draw") startDrawing(e);
+          else if (mode === "erase") handleErase(e);
+          else if (mode === "drag") handleShapeClick(e);
+        }}
+        onMouseMove={mode === "drag" ? handleDragging : mode === "draw" ? drawShape : undefined}
+        onMouseUp={mode === "draw" ? finishDrawing : mode === "drag" ? stopDragging : undefined}
+        onMouseLeave={stopDragging}
         style={{ border: "1px solid black" }}
       />
       <div>
-        <button onClick={() => setShape("line")}>Draw Line</button>
-        <button onClick={() => setShape("square")}>Draw Square</button>
-        <button onClick={() => setShape("circle")}>Draw Circle</button>
-        <button onClick={() => setErasing(!erasing)}>{erasing ? "Stop Erasing" : "Erase Shapes"}</button>
+        <button onClick={() => setMode("draw")}>Draw</button>
+        <button onClick={() => setMode("erase")}>Erase</button>
+        <button onClick={() => setMode("drag")}>Drag</button>
         <button onClick={clearCanvas}>Clear Canvas</button>
+        <button onClick={() => setShape("line")}>Line</button>
+        <button onClick={() => setShape("square")}>Square</button>
+        <button onClick={() => setShape("circle")}>Circle</button>
       </div>
+
+      {selectedShape && (
+        <div style={{ marginTop: "10px", padding: "10px", border: "1px solid #ccc" }}>
+          <h3>Shape Data</h3>
+          <p>Type: {selectedShape.type}</p>
+          <label>Start X:</label>
+          <input
+            type="number"
+            value={selectedShape.startX}
+            onChange={(e) => handleShapeInputChange(e, "startX")}
+          />
+          <br />
+          <label>Start Y:</label>
+          <input
+            type="number"
+            value={selectedShape.startY}
+            onChange={(e) => handleShapeInputChange(e, "startY")}
+          />
+          <br />
+          {selectedShape.type === "line" && (
+            <>
+              <label>End X:</label>
+              <input
+                type="number"
+                value={selectedShape.endX}
+                onChange={(e) => handleShapeInputChange(e, "endX")}
+              />
+              <br />
+              <label>End Y:</label>
+              <input
+                type="number"
+                value={selectedShape.endY}
+                onChange={(e) => handleShapeInputChange(e, "endY")}
+              />
+              <br />
+            </>
+          )}
+          {selectedShape.type === "square" && (
+            <>
+              <label>Width:</label>
+              <input
+                type="number"
+                value={selectedShape.width}
+                onChange={(e) => handleShapeInputChange(e, "width")}
+              />
+              <br />
+              <label>Height:</label>
+              <input
+                type="number"
+                value={selectedShape.height}
+                onChange={(e) => handleShapeInputChange(e, "height")}
+              />
+              <br />
+            </>
+          )}
+          {selectedShape.type === "circle" && (
+            <>
+              <label>Radius:</label>
+              <input
+                type="number"
+                value={selectedShape.radius}
+                onChange={(e) => handleShapeInputChange(e, "radius")}
+              />
+              <br />
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 };
