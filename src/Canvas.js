@@ -22,6 +22,7 @@ const Canvas = () => {
     setContext(ctx);
   }, []);
 
+  //Mouse down, ustawia punkt początkowy
   const startDrawing = (e) => {
     if (mode !== "draw") return;
     setDrawing(true);
@@ -30,9 +31,10 @@ const Canvas = () => {
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
     });
-    setSelectedShape(null); // Reset selected shape
+    setSelectedShape(null);
   };
 
+  //Mouse move, rysuje shape przy każdym ruchu myszy
   const drawShape = (e) => {
     if (!drawing) return;
 
@@ -40,6 +42,7 @@ const Canvas = () => {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
+    //Czyści canvas + od nowa rysuje istniejące shapes w arrayu
     context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
     redrawShapes();
 
@@ -68,10 +71,13 @@ const Canvas = () => {
         break;
     }
 
+    //stroke faktycznie wykonuje rysunek
     context.stroke();
     setSelectedShape(newShape);
   };
 
+
+  //Finalizuje rysowanie po opuszczeniu myszki i dodaje do arrayu
   const finishDrawing = (e) => {
     if (!drawing) return;
 
@@ -97,10 +103,12 @@ const Canvas = () => {
       finalShape.radius = radius;
     }
 
+    //Dodaje rysunek do tablicy
     setShapes((prevShapes) => [...prevShapes, finalShape]);
     setDrawing(false);
   };
 
+  //Usuwa rysunek w oparciu o pozycję myszy
   const handleErase = (e) => {
     if (mode !== "erase") return;
 
@@ -134,6 +142,7 @@ const Canvas = () => {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
+    //Sprawdza na każdym rysunku kontakt z myszką
     for (let i = shapes.length - 1; i >= 0; i--) {
       const s = shapes[i];
       switch (s.type) {
@@ -147,7 +156,7 @@ const Canvas = () => {
         case "square":
           if (x >= s.startX && x <= s.startX + s.width && y >= s.startY && y <= s.startY + s.height) {
             startDragging(i, x, y, s);
-            setSelectedShape(s); // Show shape data when clicking
+            setSelectedShape(s);
             return;
           }
           break;
@@ -174,6 +183,7 @@ const Canvas = () => {
     });
   };
 
+  //Zajmuje się przesuwaniem rysunków.
   const handleDragging = (e) => {
     if (!dragging || draggedShapeIndex === null) return;
 
@@ -184,6 +194,7 @@ const Canvas = () => {
     const updatedShapes = [...shapes];
     const shape = updatedShapes[draggedShapeIndex];
 
+    //Ustawia nowe punkty początkowe.
     switch (shape.type) {
       case "line":
         const deltaX = x - offset.x;
@@ -218,6 +229,7 @@ const Canvas = () => {
     setDraggedShapeIndex(null);
   };
 
+  //Przechodzi przez każdy element listy i rysuje go.
   const redrawShapes = () => {
     shapes.forEach((s) => {
       context.beginPath();
@@ -239,12 +251,14 @@ const Canvas = () => {
     });
   };
 
+  //Czyści tablicę
   const clearCanvas = () => {
     context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
     setShapes([]);
     setSelectedShape(null);
   };
 
+  //Zajmuje się zmianami wymiarów shapes w textboxach
   const handleShapeInputChange = (e, property) => {
     if (!selectedShape) return;
 
